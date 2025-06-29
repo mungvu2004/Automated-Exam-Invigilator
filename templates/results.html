@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kết quả Huấn luyện Model</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <header class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-6">
+                <div class="flex items-center">
+                    <i class="fas fa-chart-line text-blue-600 text-3xl mr-3"></i>
+                    <h1 class="text-2xl font-bold text-gray-900">Kết quả Huấn luyện Model</h1>
+                </div>
+                <a href="{{ url_for('index') }}" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i> Quay lại trang chính
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 space-y-8">
+        {% if not directory_exists %}
+            <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
+                <p class="font-bold">Lỗi</p>
+                <p>Không tìm thấy thư mục kết quả huấn luyện: <strong>{{ results_dir }}</strong></p>
+            </div>
+        {% else %}
+            <!-- Hiển thị chỉ số hiệu suất tốt nhất -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white rounded-lg shadow-lg p-6 text-center md:col-start-2">
+                    <h3 class="text-lg font-semibold text-gray-600 mb-2">Hiệu suất cao nhất (mAP@0.5)</h3>
+                    <p class="text-5xl font-bold text-green-600">{{ "%.2f"|format(assets.best_map_score) }}%</p>
+                </div>
+            </div>
+
+            <!-- Biểu đồ tiến trình huấn luyện -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-6 text-center">Tiến trình huấn luyện qua các Epoch</h2>
+                {% if assets.chart_data and assets.chart_data.epochs %}
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div>
+                            <h3 class="text-center font-semibold text-gray-700 mb-2">mAP@0.5</h3>
+                            <canvas id="mapChart"></canvas>
+                        </div>
+                        <div>
+                            <h3 class="text-center font-semibold text-gray-700 mb-2">Precision</h3>
+                            <canvas id="precisionChart"></canvas>
+                        </div>
+                        <div>
+                            <h3 class="text-center font-semibold text-gray-700 mb-2">Recall</h3>
+                            <canvas id="recallChart"></canvas>
+                        </div>
+                    </div>
+                {% else %}
+                    <p class="text-gray-500 text-center">Không có dữ liệu để vẽ biểu đồ. Vui lòng kiểm tra file results.csv.</p>
+                {% endif %}
+            </div>
+            
+            <!-- >>> CẢI TIẾN: Thêm section phân tích tập dữ liệu <<< -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Phân tích Tập dữ liệu</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {% if assets.labels_correlogram %}
+                        <div class="border rounded-lg p-2">
+                            <h3 class="text-center font-semibold text-gray-700 mb-2">Tương quan giữa các Lớp</h3>
+                            <img src="{{ url_for('serve_training_asset', path=assets.labels_correlogram) }}" class="w-full rounded">
+                        </div>
+                    {% endif %}
+                    {% if assets.labels %}
+                        <div class="border rounded-lg p-2">
+                            <h3 class="text-center font-semibold text-gray-700 mb-2">Phân phối Nhãn</h3>
+                            <img src="{{ url_for('serve_training_asset', path=assets.labels) }}" class="w-full rounded">
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Các biểu đồ hình ảnh về hiệu suất -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Các biểu đồ hiệu suất trực quan</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% if assets.results_png %}
+                        <div class="border rounded-lg p-2"><img src="{{ url_for('serve_training_asset', path=assets.results_png) }}" class="w-full rounded"></div>
+                    {% endif %}
+                    {% if assets.confusion_matrix %}
+                        <div class="border rounded-lg p-2"><img src="{{ url_for('serve_training_asset', path=assets.confusion_matrix) }}" class="w-full rounded"></div>
+                    {% endif %}
+                    {% if assets.pr_curve %}
+                        <div class="border rounded-lg p-2"><img src="{{ url_for('serve_training_asset', path=assets.pr_curve) }}" class="w-full rounded"></div>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </main>
+
+    {% if assets.chart_data %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Dữ liệu chung
+            const epochs = {{ assets.chart_data.epochs | tojson }};
+            const labels = epochs.map(e => `Epoch ${e + 1}`);
+
+            // Cấu hình chung cho tất cả biểu đồ
+            const commonOptions = {
+                responsive: true,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: '#6B7280',
+                            callback: function(value, index, ticks) {
+                                if (index === 0 || index === ticks.length - 1) {
+                                    return this.getLabelForValue(value);
+                                }
+                                const step = Math.ceil(ticks.length / 5);
+                                return index % step === 0 ? this.getLabelForValue(value) : '';
+                            },
+                            autoSkip: false,
+                            maxRotation: 0,
+                            minRotation: 0
+                        }
+                    },
+                    y: {
+                        min: 0,
+                        max: 1,
+                        grid: { color: '#E5E7EB', drawBorder: false },
+                        ticks: {
+                            color: '#6B7280',
+                            callback: function(value) { return (value * 100) + '%'; }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: true,
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                return `Giá trị: ${(context.parsed.y * 100).toFixed(2)}%`;
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Hàm tạo biểu đồ con
+            function createSubChart(canvasId, label, data, color) {
+                const ctx = document.getElementById(canvasId).getContext('2d');
+                const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+                gradient.addColorStop(0, `${color}66`); // 0.4 opacity
+                gradient.addColorStop(1, `${color}00`); // 0 opacity
+
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: label,
+                            data: data,
+                            borderColor: color,
+                            backgroundColor: gradient,
+                            borderWidth: 2.5,
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 5
+                        }]
+                    },
+                    options: commonOptions
+                });
+            }
+
+            // Vẽ 3 biểu đồ
+            createSubChart('mapChart', 'mAP@0.5', {{ assets.chart_data.map_05 | tojson }}, '#10B981');
+            createSubChart('precisionChart', 'Precision', {{ assets.chart_data.precision | tojson }}, '#3B82F6');
+            createSubChart('recallChart', 'Recall', {{ assets.chart_data.recall | tojson }}, '#EF4444');
+        });
+    </script>
+    {% endif %}
+</body>
+</html>

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ thống Giám sát và Phát hiện Gian lận bằng AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .tab-button.active { @apply bg-blue-600 text-white border-blue-600; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #videoElement { transform: scaleX(-1); }
+        .progress-bar-container {
+            width: 100%;
+            background-color: #e5e7eb;
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 1rem;
+            background-color: #3b82f6;
+            transition: width 0.3s ease-in-out;
+            text-align: center;
+            color: white;
+            font-size: 0.75rem;
+            line-height: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <!-- Header -->
+    <header class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-6">
+                <div class="flex items-center">
+                    <i class="fas fa-shield-alt text-blue-600 text-3xl mr-3"></i>
+                    <h1 class="text-2xl font-bold text-gray-900">Hệ thống Giám sát và Phát hiện Gian lận bằng AI</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <!-- CẢI TIẾN: Thêm nút xem kết quả huấn luyện -->
+                    <a href="{{ url_for('show_results') }}" class="text-sm bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors">
+                        <i class="fas fa-chart-bar mr-1"></i> Xem kết quả huấn luyện
+                    </a>
+                    {% if model_loaded %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                            <i class="fas fa-check-circle mr-1"></i> Model đã sẵn sàng
+                        </span>
+                    {% else %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                            <i class="fas fa-exclamation-circle mr-1"></i> Model chưa được tải
+                        </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {% if not model_loaded %}
+        <div class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div class="flex">
+                <i class="fas fa-exclamation-triangle text-yellow-400 mt-1 mr-3"></i>
+                <div>
+                    <h3 class="text-sm font-medium text-yellow-800">Model chưa được tải</h3>
+                    <p class="mt-1 text-sm text-yellow-700">Vui lòng đặt file <code class="bg-yellow-100 px-1 rounded">best.pt</code> vào thư mục gốc của ứng dụng để sử dụng các tính năng phát hiện.</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="bg-white rounded-lg shadow-lg">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8 px-6" aria-label="Tabs">
+                    <button id="tab-image" class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 active">
+                        <i class="fas fa-image mr-2"></i> Phân tích Ảnh
+                    </button>
+                    <button id="tab-video" class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        <i class="fas fa-video mr-2"></i> Phân tích Video
+                    </button>
+                    <button id="tab-webcam" class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        <i class="fas fa-camera mr-2"></i> Giám sát qua Webcam
+                    </button>
+                </nav>
+            </div>
+
+            <div class="p-6">
+                <!-- Image Analysis Tab -->
+                <div id="content-image" class="tab-content active">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="space-y-4">
+                            <h3 class="text-lg font-medium text-gray-900">Tải lên ảnh để phân tích</h3>
+                            <div id="imagePreviewContainer" class="hidden w-full h-64 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                                <img id="imagePreview" src="#" alt="Xem trước ảnh" class="max-h-full max-w-full">
+                            </div>
+                            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                                <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
+                                <input type="file" id="imageInput" accept="image/*" class="hidden">
+                                <button onclick="document.getElementById('imageInput').click()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                                    <i class="fas fa-upload mr-2"></i> Chọn ảnh
+                                </button>
+                                <p class="text-sm text-gray-500 mt-2">Hỗ trợ: JPG, PNG (Tối đa 500MB)</p>
+                            </div>
+                            <button id="analyzeImageBtn" class="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                                <i class="fas fa-search mr-2"></i> Phân tích ảnh
+                            </button>
+                        </div>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <h3 class="text-lg font-medium text-gray-900">Kết quả phân tích</h3>
+                                <button id="clearImageResultsBtn" class="text-sm text-gray-500 hover:text-red-600 transition-colors hidden"><i class="fas fa-times mr-1"></i> Xóa kết quả</button>
+                            </div>
+                            <div id="imageResults" class="border rounded-lg p-4 bg-gray-50 min-h-[400px] flex items-center justify-center">
+                                <div class="text-center text-gray-500">
+                                    <i class="fas fa-image text-4xl mb-4"></i>
+                                    <p>Chưa có kết quả phân tích</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Video Analysis Tab -->
+                <div id="content-video" class="tab-content">
+                    <div class="space-y-6">
+                        <div class="max-w-2xl mx-auto">
+                            <h3 class="text-lg font-medium text-gray-900 text-center mb-4">Tải lên video để phân tích</h3>
+                            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                                <i class="fas fa-video text-4xl text-gray-400 mb-4"></i>
+                                <input type="file" id="videoInput" accept="video/*" class="hidden">
+                                <button onclick="document.getElementById('videoInput').click()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                                    <i class="fas fa-upload mr-2"></i> Chọn video
+                                </button>
+                                <p id="videoFileName" class="text-sm text-gray-500 mt-2">Hỗ trợ: MP4, AVI, MOV (Tối đa 500MB)</p>
+                            </div>
+                            <button id="analyzeVideoBtn" class="w-full mt-4 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                                <i class="fas fa-play mr-2"></i> Phân tích video
+                            </button>
+                        </div>
+                        <div id="videoResultsContainer" class="max-w-4xl mx-auto">
+                            <div id="videoPlaceholder" class="text-center text-gray-500">
+                                <i class="fas fa-film text-4xl mb-4"></i>
+                                <p>Chưa có video để phân tích</p>
+                            </div>
+                            <div id="videoProgress" class="hidden space-y-4">
+                                <h4 class="text-lg font-medium text-center text-gray-800">Đang xử lý video...</h4>
+                                <div class="progress-bar-container">
+                                    <div id="videoProgressBar" class="progress-bar" style="width: 0%;">0%</div>
+                                </div>
+                                <p id="videoProgressStatus" class="text-center text-sm text-gray-600">Đang khởi tạo...</p>
+                            </div>
+                            <div id="videoResult" class="hidden"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Webcam Tab -->
+                <div id="content-webcam" class="tab-content">
+                    <h3 class="text-lg font-medium text-gray-900 text-center mb-4">Giám sát trực tiếp qua Webcam</h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- Cột Video Stream (chiếm 2/3) -->
+                        <div class="lg:col-span-2 space-y-4">
+                            <div class="webcam-container bg-black rounded-lg overflow-hidden shadow-lg relative">
+                                <video id="videoElement" width="640" height="480" autoplay muted class="w-full"></video>
+                                <canvas id="overlayCanvas" width="640" height="480" class="absolute top-0 left-0 w-full h-full pointer-events-none" style="transform: scaleX(-1);"></canvas>
+                            </div>
+                            <div class="text-center space-x-4">
+                                <button id="startWebcamBtn" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                                    <i class="fas fa-play mr-2"></i> Bắt đầu giám sát
+                                </button>
+                                <button id="stopWebcamBtn" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors" disabled>
+                                    <i class="fas fa-stop mr-2"></i> Dừng giám sát
+                                </button>
+                            </div>
+                            <div id="webcamStatus" class="p-3 rounded-lg bg-gray-100 text-center">
+                                <span class="text-gray-600">Nhấn "Bắt đầu giám sát" để khởi động webcam</span>
+                            </div>
+                        </div>
+
+                        <!-- Cột Thống kê và Bằng chứng (chiếm 1/3) -->
+                        <div class="lg:col-span-1 space-y-4">
+                            <!-- Thống kê phiên -->
+                            <div class="bg-white p-4 rounded-lg shadow-inner">
+                                <h4 class="font-medium text-gray-900 mb-3 text-center">Thống kê phiên</h4>
+                                <div class="flex justify-around items-center text-center">
+                                    <div>
+                                        <div id="webcamSuspiciousCount" class="text-3xl font-bold text-red-600">0</div>
+                                        <div class="text-sm text-gray-500">Đáng ngờ</div>
+                                    </div>
+                                    <div>
+                                        <div id="webcamTotalCount" class="text-3xl font-bold text-blue-600">0</div>
+                                        <div class="text-sm text-gray-500">Tổng phát hiện</div>
+                                    </div>
+                                </div>
+                                <div class="mt-4 bg-gray-50 p-3 rounded-lg shadow-inner">
+                                    <h5 class="font-medium text-gray-800 mb-2 text-sm">Chi tiết:</h5>
+                                    <ul id="webcamStatsList" class="space-y-1 max-h-24 overflow-y-auto text-sm">
+                                        <li class="text-gray-400">Chưa có dữ liệu...</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <!-- Thư viện bằng chứng -->
+                            <div class="bg-white p-4 rounded-lg shadow-inner">
+                                <h4 class="font-medium text-gray-900 mb-3 text-center">Bằng chứng đáng ngờ</h4>
+                                <div id="webcamEvidenceContainer" class="space-y-3 max-h-96 overflow-y-auto bg-gray-50 p-2 rounded-lg">
+                                    <p id="webcamEvidencePlaceholder" class="text-center text-gray-400 text-sm py-4">Chưa có bằng chứng</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="loadingModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg p-6 max-w-sm mx-4 text-center"><div class="spinner mx-auto mb-4"></div><h3 class="text-lg font-medium text-gray-900 mb-2">Đang xử lý...</h3><p id="loadingMessage" class="text-gray-600">Vui lòng đợi</p></div>
+    </div>
+    <div id="errorToast" class="fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 z-50"><div class="flex items-center"><i class="fas fa-exclamation-circle mr-2"></i><span id="errorMessage">Có lỗi xảy ra</span></div></div>
+    <div id="successToast" class="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 z-50"><div class="flex items-center"><i class="fas fa-check-circle mr-2"></i><span id="successMessage">Thành công</span></div></div>
+
+    <div id="imageModal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 hidden transition-opacity duration-300">
+        <div class="relative max-w-5xl max-h-[90vh] bg-white p-2 rounded-lg shadow-xl">
+            <img id="modalImage" src="" alt="Xem ảnh chi tiết" class="max-w-full max-h-full object-contain rounded">
+            <button id="closeModalBtn" class="absolute top-0 right-0 -mt-4 -mr-4 bg-red-600 text-white rounded-full h-10 w-10 flex items-center justify-center text-2xl font-bold hover:bg-red-700 focus:outline-none">×</button>
+        </div>
+    </div>
+
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+</body>
+</html>

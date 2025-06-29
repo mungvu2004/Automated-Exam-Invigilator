@@ -1,0 +1,13 @@
+# START OF FILE requirements.txt
+
+Flask>=2.3.0
+torch>=1.13.0
+torchvision>=0.14.0
+opencv-python-headless==4.8.1.78
+numpy>=1.21.0
+Pillow>=9.0.0
+Werkzeug>=2.3.0
+pandas>=1.3.0
+# CẢI TIẾN: Sửa lỗi nghiêm trọng. Gói ultralytics BẮT BUỘC phải được cài đặt 
+# để torch.hub có thể tải và sử dụng mã nguồn của model YOLOv5.
+ultralytics>=8.0.0
